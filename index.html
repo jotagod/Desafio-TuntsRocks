@@ -1,0 +1,242 @@
+<!--
+Copyright 2018 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<!-- [START sheets_quickstart] -->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Tunts.Rocks - Desafio João Aurélio Dantas</title>
+    <meta charset="utf-8" />
+  </head>
+  <body>
+    <p>Tunts.Rocks - Desafio João Aurélio Dantas</p>
+
+    <!--Add buttons to initiate auth sequence and sign out-->
+    <button id="authorize_button" onclick="handleAuthClick()">Authorize</button>
+    <button id="signout_button" onclick="handleSignoutClick()">Sign Out</button>
+
+    <pre id="content" style="white-space: pre-wrap"></pre>
+
+    <script type="text/javascript">
+      /* exported gapiLoaded */
+      /* exported gisLoaded */
+      /* exported handleAuthClick */
+      /* exported handleSignoutClick */
+
+      // TODO(developer): Set to client ID and API key from the Developer Console
+      const CLIENT_ID =
+        "450754187172-v64vb49khv0cr89if2rh03r3ntntjsrf.apps.googleusercontent.com";
+      const API_KEY = "AIzaSyCjp1xSRUEZWAskgYpn9XPYAtmqH-EN_y8";
+
+      // Discovery doc URL for APIs used by the quickstart
+      const DISCOVERY_DOC =
+        "https://sheets.googleapis.com/$discovery/rest?version=v4";
+
+      // Authorization scopes required by the API; multiple scopes can be
+      // included, separated by spaces.
+      const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
+
+      let tokenClient;
+      let gapiInited = false;
+      let gisInited = false;
+
+      document.getElementById("authorize_button").style.visibility = "hidden";
+      document.getElementById("signout_button").style.visibility = "hidden";
+
+      /**
+       * Callback after api.js is loaded.
+       */
+      function gapiLoaded() {
+        gapi.load("client", initializeGapiClient);
+      }
+
+      /**
+       * Callback after the API client is loaded. Loads the
+       * discovery doc to initialize the API.
+       */
+      async function initializeGapiClient() {
+        await gapi.client.init({
+          apiKey: API_KEY,
+          discoveryDocs: [DISCOVERY_DOC],
+        });
+        gapiInited = true;
+        maybeEnableButtons();
+      }
+
+      /**
+       * Callback after Google Identity Services are loaded.
+       */
+      function gisLoaded() {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: CLIENT_ID,
+          scope: SCOPES,
+          callback: "", // defined later
+        });
+        gisInited = true;
+        maybeEnableButtons();
+      }
+
+      /**
+       * Enables user interaction after all libraries are loaded.
+       */
+      function maybeEnableButtons() {
+        if (gapiInited && gisInited) {
+          document.getElementById("authorize_button").style.visibility =
+            "visible";
+        }
+      }
+
+      /**
+       *  Sign in the user upon button click.
+       */
+      function handleAuthClick() {
+        tokenClient.callback = async (resp) => {
+          if (resp.error !== undefined) {
+            throw resp;
+          }
+          document.getElementById("signout_button").style.visibility =
+            "visible";
+          document.getElementById("authorize_button").innerText = "Refresh";
+          await listStudents();
+        };
+
+        if (gapi.client.getToken() === null) {
+          // Prompt the user to select a Google Account and ask for consent to share their data
+          // when establishing a new session.
+          tokenClient.requestAccessToken({ prompt: "consent" });
+        } else {
+          // Skip display of account chooser and consent dialog for an existing session.
+          tokenClient.requestAccessToken({ prompt: "" });
+        }
+      }
+
+      /**
+       *  Sign out the user upon button click.
+       */
+      function handleSignoutClick() {
+        const token = gapi.client.getToken();
+        if (token !== null) {
+          google.accounts.oauth2.revoke(token.access_token);
+          gapi.client.setToken("");
+          document.getElementById("content").innerText = "";
+          document.getElementById("authorize_button").innerText = "Authorize";
+          document.getElementById("signout_button").style.visibility = "hidden";
+        }
+      }
+
+      /**
+       * Prints the results of the students based on attendance and grades:
+       * https://docs.google.com/spreadsheets/d/1pZoLzMc5b4zbIjUMavnb3Tg6LgJQJVxBJckH09PMiUA/edit#gid=0
+       */
+
+      studentsResults = 0;
+
+      async function listStudents() {
+        let response;
+        try {
+          // Fetch all data
+          response = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: "1pZoLzMc5b4zbIjUMavnb3Tg6LgJQJVxBJckH09PMiUA",
+            range: "engenharia_de_software!A2:F",
+          });
+        } catch (err) {
+          document.getElementById("content").innerText = err.message;
+          return;
+        }
+        const range = response.result;
+        if (!range || !range.values || range.values.length == 0) {
+          document.getElementById("content").innerText = "No values found.";
+          return;
+        }
+        // Flatten to string to display
+        const totalClasses = range.values[0][0].match(/\d+/g);
+        const output = range.values.slice(2).map((item) => {
+          let studentSituation = "";
+          let finalGrade = 0;
+          if (item[2] / totalClasses > 0.25) {
+            studentSituation = "Reprovado por Falta";
+          } else if (
+            (Number(item[3]) + Number(item[4]) + Number(item[5])) / 3 <
+            50
+          ) {
+            studentSituation = "Reprovado por Nota";
+          } else if (
+            (Number(item[3]) + Number(item[4]) + Number(item[5])) / 3 <
+            70
+          ) {
+            studentSituation = "Exame Final";
+            finalGrade =
+              Math.ceil(
+                (
+                  100 -
+                  (Number(item[3]) + Number(item[4]) + Number(item[5])) / 3
+                ).toFixed(1) / 10
+              ) * 10;
+          } else {
+            studentSituation = "Aprovado";
+          }
+          return [studentSituation, finalGrade];
+        });
+        document.getElementById("content").innerText = output;
+        studentsResults = output;
+      }
+
+      function updateValues(
+        spreadsheetId,
+        range,
+        valueInputOption,
+        _values,
+        callback
+      ) {
+        values = _values;
+
+        const body = {
+          values: studentsResults,
+        };
+        try {
+          gapi.client.sheets.spreadsheets.values
+            .update({
+              spreadsheetId: "1pZoLzMc5b4zbIjUMavnb3Tg6LgJQJVxBJckH09PMiUA",
+              range: "engenharia_de_software!G4:H27",
+              valueInputOption: "RAW",
+              resource: body,
+            })
+            .then((response) => {
+              const result = response.result;
+              console.log(`${result.updatedCells} cells updated.`);
+              if (callback) callback(response);
+            });
+        } catch (err) {
+          document.getElementById("content").innerText = err.message;
+          return;
+        }
+      }
+    </script>
+    <script
+      async
+      defer
+      src="https://apis.google.com/js/api.js"
+      onload="gapiLoaded()"
+    ></script>
+    <script
+      async
+      defer
+      src="https://accounts.google.com/gsi/client"
+      onload="gisLoaded()"
+    ></script>
+    <button onclick="updateValues()">Update Students Situation</button>
+  </body>
+</html>
+<!-- [END sheets_quickstart] -->
