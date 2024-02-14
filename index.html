@@ -36,6 +36,7 @@ limitations under the License.
       /* exported handleSignoutClick */
 
       // TODO(developer): Set to client ID and API key from the Developer Console
+      // Added the client ID and API key generated for this challange
       const CLIENT_ID =
         "450754187172-v64vb49khv0cr89if2rh03r3ntntjsrf.apps.googleusercontent.com";
       const API_KEY = "AIzaSyCjp1xSRUEZWAskgYpn9XPYAtmqH-EN_y8";
@@ -46,6 +47,8 @@ limitations under the License.
 
       // Authorization scopes required by the API; multiple scopes can be
       // included, separated by spaces.
+      // Used the scope necessary to update the values on the spreadsheet.
+      // Needed to add the scope on Googel OAuth service.
       const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
 
       let tokenClient;
@@ -137,9 +140,11 @@ limitations under the License.
       }
 
       /**
-       * Prints the results of the students based on attendance and grades:
+       * Updates the results of the students based on attendance and grades on the following Google Spreadsheet:
        * https://docs.google.com/spreadsheets/d/1pZoLzMc5b4zbIjUMavnb3Tg6LgJQJVxBJckH09PMiUA/edit#gid=0
        */
+
+      //  Executes an map to store the results of students situation and final grade on arrays.
 
       studentsResults = 0;
 
@@ -150,40 +155,35 @@ limitations under the License.
           response = await gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: "1pZoLzMc5b4zbIjUMavnb3Tg6LgJQJVxBJckH09PMiUA",
             range: "engenharia_de_software!A2:F",
+            // Determine the spreadsheet ID an the interval witch data need to be read.
           });
         } catch (err) {
           document.getElementById("content").innerText = err.message;
           return;
         }
+        // Checks for errors and if theres no data, return
         const range = response.result;
         if (!range || !range.values || range.values.length == 0) {
           document.getElementById("content").innerText = "No values found.";
           return;
         }
-        // Flatten to string to display
+        // Executes the mapping, totalClasses is storing the amount of classes
         const totalClasses = range.values[0][0].match(/\d+/g);
         const output = range.values.slice(2).map((item) => {
+          let averageGrade =
+            Number(item[3]) + Number(item[4]) + Number(item[5]);
           let studentSituation = "";
           let finalGrade = 0;
+          // Assume finalGrade will be 0 unless student fall into "Exame Final" condition
           if (item[2] / totalClasses > 0.25) {
+            // Checks attendante of each student for "Reprovado por Falta" Condition
             studentSituation = "Reprovado por Falta";
-          } else if (
-            (Number(item[3]) + Number(item[4]) + Number(item[5])) / 3 <
-            50
-          ) {
+          } else if (averageGrade / 3 < 50) {
             studentSituation = "Reprovado por Nota";
-          } else if (
-            (Number(item[3]) + Number(item[4]) + Number(item[5])) / 3 <
-            70
-          ) {
+          } else if (averageGrade / 3 < 70) {
             studentSituation = "Exame Final";
             finalGrade =
-              Math.ceil(
-                (
-                  100 -
-                  (Number(item[3]) + Number(item[4]) + Number(item[5])) / 3
-                ).toFixed(1) / 10
-              ) * 10;
+              Math.ceil((100 - averageGrade / 3).toFixed(1) / 10) * 10;
           } else {
             studentSituation = "Aprovado";
           }
@@ -193,6 +193,7 @@ limitations under the License.
         studentsResults = output;
       }
 
+      // Function to update the values on the spreadsheet
       function updateValues(
         spreadsheetId,
         range,
@@ -204,6 +205,7 @@ limitations under the License.
 
         const body = {
           values: studentsResults,
+          // studentsResults is an array of arrays, containing the students situation and final grade
         };
         try {
           gapi.client.sheets.spreadsheets.values
@@ -237,6 +239,7 @@ limitations under the License.
       onload="gisLoaded()"
     ></script>
     <button onclick="updateValues()">Update Students Situation</button>
+    <!-- Button used for calling the updateValues function -->
   </body>
 </html>
 <!-- [END sheets_quickstart] -->
